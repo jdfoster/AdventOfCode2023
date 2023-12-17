@@ -44,6 +44,48 @@ func parseGame(s string) (int, []map[string]int) {
 	return g, aa
 }
 
+func possibleGame(s string) (int, bool) {
+	g, rr := parseGame(s)
+
+	for _, r := range rr {
+		for c, v := range r {
+			w, ok := inital[c]
+			if !ok {
+				return g, false
+			}
+
+			if v > w {
+				return g, false
+			}
+		}
+	}
+
+	return g, true
+}
+
+func powerGame(s string) int {
+	_, rr := parseGame(s)
+	st := make(map[string]int, 3)
+
+	for _, r := range rr {
+		for c, v := range r {
+			w := st[c]
+
+			if v > w {
+				st[c] = v
+			}
+		}
+	}
+
+	var a int = 1
+
+	for _, v := range st {
+		a *= v
+	}
+
+	return a
+}
+
 func main() {
 	f, err := os.Open(fn)
 	if err != nil {
@@ -54,27 +96,16 @@ func main() {
 
 	s := bufio.NewScanner(f)
 
-	var a int
+	var a, b int
 
-LOOP:
 	for s.Scan() {
-		g, rr := parseGame(s.Text())
-
-		for _, r := range rr {
-			for c, v := range r {
-				w, ok := inital[c]
-				if !ok {
-					continue LOOP
-				}
-
-				if v > w {
-					continue LOOP
-				}
-			}
+		if v, ok := possibleGame(s.Text()); ok {
+			a += v
 		}
 
-		a += g
+		b += powerGame(s.Text())
 	}
 
 	fmt.Println("part one value: ", a)
+	fmt.Println("part two value: ", b)
 }
