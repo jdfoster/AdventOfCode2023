@@ -33,6 +33,7 @@ func main() {
 	}
 
 	var total int
+	gs := make(map[int][]int)
 
 	for _, p := range re.FindAllIndex(bb, -1) {
 		ai, bi := p[0], p[1]
@@ -51,6 +52,11 @@ func main() {
 					if !unicode.IsDigit(r) && r != '.' && r != '\n' {
 						total += n
 
+						if r == '*' {
+							gg := gs[j]
+							gs[j] = append(gg, n)
+						}
+
 						break LOOP
 					}
 				}
@@ -59,4 +65,13 @@ func main() {
 	}
 
 	fmt.Println("part one value: ", total)
+
+	var product int
+	for _, gg := range gs {
+		if len(gg) == 2 {
+			product += (gg[0] * gg[1])
+		}
+	}
+
+	fmt.Println("part two value: ", product)
 }
