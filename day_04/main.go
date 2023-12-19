@@ -10,10 +10,16 @@ import (
 
 var fn = "./day_04/input.txt"
 
-func parseGame(s string) ([]int, []int) {
+func parseGame(s string) (int, []int, []int) {
 	ss := strings.Split(s, ":")
-	ll := strings.Split(ss[1], "|")
 
+	cs := strings.TrimSpace(strings.TrimPrefix(ss[0], "Card "))
+	c, err := strconv.Atoi(cs)
+	if err != nil {
+		panic(err)
+	}
+
+	ll := strings.Split(ss[1], "|")
 	r := make([][]int, len(ll))
 
 	for i, l := range ll {
@@ -32,7 +38,7 @@ func parseGame(s string) ([]int, []int) {
 		}
 	}
 
-	return r[0], r[1]
+	return c, r[0], r[1]
 }
 
 func findMatched(aa, bb []int) []int {
@@ -60,14 +66,51 @@ func calcScore(a []int) int {
 
 	}
 
-	for i := 0; i < l -1; i++ {
+	for i := 0; i < l-1; i++ {
 		v *= 2
 	}
 
-
-	fmt.Println(l, v)
-
 	return v
+}
+
+func sumCards(l string) int {
+	_, a, b := parseGame(l)
+	return calcScore(findMatched(a, b))
+}
+
+type counter struct {
+	state map[int]int
+}
+
+func (c counter) Get(i int) int {
+	if _, ok := c.state[i]; !ok {
+		c.state[i] = 1
+	}
+
+	return c.state[i]
+}
+
+func (c counter) Add(l string) {
+	i, a, b := parseGame(l)
+	m := findMatched(a, b)
+
+	if _, ok := c.state[i]; !ok {
+		c.state[i] = 1
+	}
+
+	for j := 0; j < len(m); j++ {
+		k := i + j + 1
+		c.state[k] = c.Get(k) + c.Get(i)
+	}
+}
+
+func (c counter) Sum() int {
+	var r int
+	for _, v := range c.state {
+		r += v
+	}
+
+	return r
 }
 
 func main() {
@@ -81,10 +124,13 @@ func main() {
 	s := bufio.NewScanner(f)
 
 	var a int
+	b := &counter{state: make(map[int]int)}
 
 	for s.Scan() {
-		a += calcScore(findMatched(parseGame(s.Text())))
+		a += sumCards(s.Text())
+		b.Add(s.Text())
 	}
 
 	fmt.Println("part one value: ", a)
+	fmt.Println("part two value: ", b.Sum())
 }
