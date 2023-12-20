@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var fn = "./day_05/input.txt"
@@ -90,13 +92,25 @@ func parse(b []byte) ([]int, [][][]int) {
 	return seeds, rules
 }
 
+func unzip(e int, xx ...int) []int {
+	vv := make([]int, 0, len(xx))
+
+	for i, x := range xx {
+		if i%2 == e {
+			vv = append(vv, x)
+		}
+	}
+
+	return vv
+}
+
 func main() {
 	bb, err := os.ReadFile(fn)
 	if err != nil {
 		panic(err)
 	}
 
-	ss, rrr := parse(bb)
+	ia, rrr := parse(bb)
 
 	ggg := make([]lookup, len(rrr))
 	for i, rr := range rrr {
@@ -110,19 +124,44 @@ func main() {
 		ggg[i] = mkRules(gg...)
 	}
 
-	p := mkPath(ggg...)
-
-	vv := make([]int, len(ss))
-	for i, s := range ss {
-		vv[i] = p(s)
-	}
-
-	m := math.MaxInt
-	for _, v := range vv {
-		if v < m {
-			m = v
+	pt := mkPath(ggg...)
+	proc := func(xx ...int) []int {
+		v := make([]int, len(xx))
+		for i, x := range xx {
+			v[i] = pt(x)
 		}
+
+		return v
 	}
 
-	fmt.Println("part one value: ", m)
+	fmt.Println("part one value: ", slices.Min(proc(ia...)))
+
+	iba := unzip(0, ia...)
+	ibb := unzip(1, ia...)
+
+	if len(iba) != len(ibb) {
+		panic("lengths are not equal")
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(iba))
+	rb := make([]int, len(iba))
+
+	for i := 0; i < len(iba); i++ {
+		go func(j int) {
+			rb[j] = math.MaxInt
+			a, b := iba[j], ibb[j]
+
+			for k := 0; k < b; k++ {
+				rb[j] = min(rb[j], pt(a+k))
+			}
+
+			fmt.Println(fmt.Sprintf(">>> [%d] %d", j, rb[j]))
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+
+	fmt.Println("part two value: ", slices.Min(rb))
 }
