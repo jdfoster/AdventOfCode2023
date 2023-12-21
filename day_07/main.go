@@ -19,7 +19,7 @@ type hand struct {
 	score []int
 }
 
-func newHand(s string, b int) *hand {
+func newHandA(s string, b int) *hand {
 	h := &hand{
 		value: s,
 		bid:   b,
@@ -92,6 +92,88 @@ func newHand(s string, b int) *hand {
 	return h
 }
 
+func newHandB(s string, b int) *hand {
+	h := &hand{
+		value: s,
+		bid:   b,
+	}
+
+	l := utf8.RuneCount([]byte(s))
+	rc := make(map[rune]int, l)
+	h.score = make([]int, l)
+
+	var jc int
+
+	for i, r := range s {
+		if r != 'J' {
+			rc[r]++
+		} else {
+			if _, ok := rc[r]; !ok {
+				rc[r] = 0
+			}
+		}
+
+		switch r {
+		case 'A':
+			h.score[i] = 14
+		case '2':
+			h.score[i] = 2
+		case '3':
+			h.score[i] = 3
+		case '4':
+			h.score[i] = 4
+		case '5':
+			h.score[i] = 5
+		case '6':
+			h.score[i] = 6
+		case '7':
+			h.score[i] = 7
+		case '8':
+			h.score[i] = 8
+		case '9':
+			h.score[i] = 9
+		case 'T':
+			h.score[i] = 10
+		case 'J':
+			jc++
+			h.score[i] = 1
+		case 'Q':
+			h.score[i] = 12
+		case 'K':
+			h.score[i] = 13
+		default:
+			panic("failed to parse character")
+		}
+
+	}
+
+	rr := make([]int, 0, len(rc))
+
+	for _, c := range rc {
+		rr = append(rr, c)
+	}
+
+	slices.Sort(rr)
+	slices.Reverse(rr)
+
+	switch {
+	case rr[0]+jc == 5:
+		h.count = 6
+	case rr[0]+jc == 4:
+		h.count = 5
+	case rr[0]+jc == 3 && rr[1] == 2:
+		h.count = 4
+	case rr[0]+jc == 3:
+		h.count = 3
+	case rr[0] == 2 && (rr[1] == 2 || jc == 2):
+		h.count = 2
+	case rr[0]+jc == 2:
+		h.count = 1
+	}
+
+	return h
+}
+
 type hands []*hand
 
 func (hh hands) Len() int {
@@ -119,25 +201,46 @@ func (hh hands) Less(i, j int) bool {
 	return false
 }
 
-func parse(s string) hands {
+func parse(s string) ([]string, []int) {
 	bb := strings.Split(s, "\n")
-	hh := make([]*hand, 0, len(bb))
+	vv := make([]string, 0, len(bb))
+	cc := make([]int, 0, len(bb))
 
 	for _, b := range bb {
 		if b == "" {
 			continue
 		}
 
-		vv := strings.Split(b, " ")
-		b, err := strconv.Atoi(vv[1])
+		h := strings.Split(b, " ")
+		c, err := strconv.Atoi(h[1])
 		if err != nil {
 			panic(err)
 		}
 
-		hh = append(hh, newHand(vv[0], b))
+		vv = append(vv, h[0])
+		cc = append(cc, c)
 	}
 
-	return hh
+	return vv, cc
+}
+
+func makeCalc(p func(string, int) *hand) func([]string, []int) int {
+	return func(vv []string, cc []int) int {
+		aa := make(hands, len(vv))
+
+		for i, v := range vv {
+			aa[i] = p(v, cc[i])
+		}
+
+		sort.Sort(aa)
+
+		var a int
+		for i, h := range aa {
+			a += h.bid * (i + 1)
+		}
+
+		return a
+	}
 }
 
 func main() {
@@ -146,13 +249,10 @@ func main() {
 		panic(err)
 	}
 
-	hh := parse(string(bb))
-	sort.Sort(hh)
-
-	var a int
-	for i, h := range hh {
-		a += h.bid * (i + 1)
-	}
+	vv, cc := parse(string(bb))
+	a := makeCalc(newHandA)(vv, cc)
+	b := makeCalc(newHandB)(vv, cc)
 
 	fmt.Println("part one value: ", a)
+	fmt.Println("part two value: ", b)
 }
