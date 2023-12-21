@@ -61,16 +61,63 @@ func (c chart) next(i int) rune {
 	return []rune(c.directions)[j]
 }
 
-func (c chart) run(start, end string) int {
-	p := start
+func (c chart) runSingle() int {
+	p := "AAA"
 	var i int
 
-	for p != end {
+	for p != "ZZZ" {
 		p = c.move(p, c.next(i))
 		i++
 	}
 
 	return i
+}
+
+func (c chart) runMulti() []int {
+	ss := make([]string, 0, len(c.nodes))
+
+	for k := range c.nodes {
+		if []rune(k)[2] == 'A' {
+			ss = append(ss, k)
+		}
+	}
+
+	vv := make([]int, len(ss))
+
+	for i := 0; i < len(ss); i++ {
+		for {
+			if []rune(ss[i])[2] == 'Z' {
+				break
+			}
+
+			ss[i] = c.move(ss[i], c.next(vv[i]))
+			vv[i]++
+		}
+	}
+
+	return vv
+}
+
+// https://siongui.github.io/2017/06/03/go-find-lcm-by-gcd/
+// greatest common divisor (GCD) via Euclidean algorithm
+func GCD(a, b int) int {
+	for b != 0 {
+		t := b
+		b = a % b
+		a = t
+	}
+	return a
+}
+
+// find Least Common Multiple (LCM) via GCD
+func LCM(a, b int, integers ...int) int {
+	result := a * b / GCD(a, b)
+
+	for i := 0; i < len(integers); i++ {
+		result = LCM(result, integers[i])
+	}
+
+	return result
 }
 
 func newChart(d string, ee [][]string) *chart {
@@ -98,5 +145,8 @@ func main() {
 	d, ee := parse(string(bb))
 	c := newChart(d, ee)
 
-	fmt.Println("part one value: ", c.run("AAA", "ZZZ"))
+	fmt.Println("part one value: ", c.runSingle())
+
+	bi := c.runMulti()
+	fmt.Println("part two value: ", LCM(bi[0], bi[1], bi[2:]...))
 }
