@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -58,12 +59,18 @@ func main() {
 
 	s := bufio.NewScanner(f)
 
-	var a int
+	var (
+		a int
+		b int
+	)
 
 	for s.Scan() {
 		rr := parse(s.Text())
 		a += predict(rr)
+		slices.Reverse(rr)
+		b += predict(rr)
 	}
 
 	fmt.Println("part one value: ", a)
+	fmt.Println("part one value: ", b)
 }
