@@ -151,9 +151,8 @@ func (p position) move(g *grid, d dir) (di int, ok bool) {
 }
 
 func walk(g *grid, p position) []position {
-	state := map[position]struct{}{
-		p: {},
-	}
+	state := make(map[position]struct{}, g.cols*g.rows)
+	state[p] = struct{}{}
 
 	var wrapper func(position)
 
@@ -191,17 +190,59 @@ func writeRoute(g *grid, pp []position) *grid {
 	return r
 }
 
+func findEdges(c, r int) []position {
+	l := r * c
+	rr := make([]position, 0, l)
+
+	for i := 0; i < c; i++ {
+		rr = append(rr, position{i: i, d: DOWN})
+	}
+
+	for i := l - r; i < l; i++ {
+		rr = append(rr, position{i: i, d: UP})
+	}
+
+	for i := 0; i < l; i++ {
+		if i%r == 0 {
+			rr = append(rr, position{i: i, d: RIGHT})
+		}
+		if i%r == r-1 {
+			rr = append(rr, position{i: i, d: LEFT})
+		}
+	}
+
+	return rr
+}
+
 func main() {
-	b, err := os.ReadFile(fn)
+	bb, err := os.ReadFile(fn)
 	if err != nil {
 		panic(err)
 	}
 
-	g := newGridFromString(string(b))
+	g := newGridFromString(string(bb))
+
 	pp := walk(g, position{i: 0, d: RIGHT})
 	a := writeRoute(g, pp)
-
-	fmt.Println(a)
-	fmt.Println("")
+	// fmt.Println(a)
+	// fmt.Println("")
 	fmt.Println("part one value: ", a.countRune('#'))
+	// fmt.Println("")
+
+	dd := findEdges(g.cols, g.rows)
+	gg := make([]*grid, len(dd))
+	var mx, mi int
+	for i, d := range dd {
+		w := walk(g, d)
+		gg[i] = writeRoute(g, w)
+		if c := gg[i].countRune('#'); c > mx {
+			mx = c
+			mi = i
+		}
+	}
+
+	b := gg[mi]
+	// fmt.Println(b)
+	// fmt.Println("")
+	fmt.Println("part two value: ", b.countRune('#'))
 }
