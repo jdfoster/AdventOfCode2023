@@ -118,8 +118,34 @@ const (
 	ACCEPT
 )
 
-type lookup map[string]*instruct
 type shape map[string]int
+
+type boundary struct {
+	lower int
+	upper int
+}
+
+type shapeBoundary map[string]boundary
+
+func (s shapeBoundary) sum() int {
+	p := 1
+	for _, b := range s {
+		p *= b.upper - b.lower + 1
+	}
+
+	return p
+}
+
+func newShapeBoundary() shapeBoundary {
+	return shapeBoundary{
+		"x": boundary{lower: 1, upper: 4000},
+		"m": boundary{lower: 1, upper: 4000},
+		"a": boundary{lower: 1, upper: 4000},
+		"s": boundary{lower: 1, upper: 4000},
+	}
+}
+
+type lookup map[string]*instruct
 
 func (u lookup) validateShape(s shape, l string) outcome {
 	ins, ok := u[l]
@@ -137,6 +163,73 @@ func (u lookup) validateShape(s shape, l string) outcome {
 	}
 
 	return u.validateShape(s, d)
+}
+
+func (u lookup) walk(s shapeBoundary, l string) int {
+	switch l {
+	case "A":
+		return s.sum()
+	case "R":
+		return 0
+	}
+
+	ins, ok := u[l]
+	if !ok {
+		panic(fmt.Sprintf("failed to find label %q", l))
+	}
+
+	var (
+		total int
+		np    bool
+	)
+	for _, c := range ins.criteria {
+		si, ok := s[c.component]
+		if !ok {
+			panic(fmt.Sprintf("failed to find component %q in boundary", c.component))
+		}
+
+		var tb, fb boundary
+
+		switch c.operator {
+		case LESS_THAN:
+			tb.lower = si.lower
+			tb.upper = c.value - 1
+			fb.lower = c.value
+			fb.upper = si.upper
+		case GREATER_THAN:
+			tb.lower = c.value + 1
+			tb.upper = si.upper
+			fb.lower = si.lower
+			fb.upper = c.value
+		}
+
+		if tb.lower <= tb.upper {
+			r := make(shapeBoundary, 4)
+			for k, v := range s {
+				if k == c.component {
+					r[k] = tb
+					continue
+				}
+
+				r[k] = v
+			}
+
+			total += u.walk(r, c.whenTrue)
+		}
+
+		if fb.lower > fb.upper {
+			np = true
+			break
+		}
+
+		s[c.component] = fb
+	}
+
+	if !np {
+		total += u.walk(s, ins.whenFalse)
+	}
+
+	return total
 }
 
 func newLookup(ss []string) lookup {
@@ -160,7 +253,7 @@ func parse(f string) (lookup, []shape) {
 
 	var n int
 	for i, k := range kk {
-		ss[i] = make(map[string]int, 3)
+		ss[i] = make(map[string]int, 4)
 		cc := strings.Split(strings.TrimSuffix(strings.TrimPrefix(k, "{"), "}"), ",")
 
 		for _, c := range cc {
@@ -205,4 +298,7 @@ func main() {
 	}
 
 	fmt.Println("part one value: ", a)
+
+	b := rr.walk(newShapeBoundary(), "in")
+	fmt.Println("part two value: ", b)
 }
