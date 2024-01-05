@@ -17,12 +17,13 @@ const (
 )
 
 type pulse struct {
-	src  string
-	dest string
-	kind polarity
+	src   string
+	dest  string
+	kind  polarity
+	count int
 }
 
-type component interface {
+type part interface {
 	process(p pulse) []pulse
 }
 
@@ -46,9 +47,10 @@ func (f *flipFlop) process(p pulse) []pulse {
 
 		for i, d := range f.targets {
 			rr[i] = pulse{
-				src:  f.label,
-				dest: d,
-				kind: k,
+				src:   f.label,
+				dest:  d,
+				kind:  k,
+				count: p.count,
 			}
 		}
 
@@ -62,6 +64,30 @@ type conjunction struct {
 	label   string
 	sources map[string]polarity
 	targets []string
+	cycles  map[string]int
+}
+
+func (c *conjunction) intervals() ([]int, bool) {
+	if len(c.sources) != len(c.cycles) {
+		return nil, false
+	}
+
+	r := make([]int, 0, len(c.cycles))
+	for _, v := range c.cycles {
+		r = append(r, v)
+	}
+
+	return r, true
+}
+
+func (c *conjunction) equal(p polarity) bool {
+	for _, v := range c.sources {
+		if v != p {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (c *conjunction) process(p pulse) []pulse {
@@ -72,25 +98,25 @@ func (c *conjunction) process(p pulse) []pulse {
 
 	c.sources[p.src] = p.kind
 
-	var allHigh bool = true
-	for _, v := range c.sources {
-		allHigh = allHigh && v == HIGH
-		if !allHigh {
-			break
+	if p.kind == HIGH {
+		if _, ok := c.cycles[p.src]; !ok {
+			c.cycles[p.src] = p.count
+			// fmt.Println(p.src, p.count)
 		}
 	}
 
 	var k polarity
-	if !allHigh {
+	if !c.equal(HIGH) {
 		k = HIGH
 	}
-	rr := make([]pulse, len(c.targets))
 
+	rr := make([]pulse, len(c.targets))
 	for i, d := range c.targets {
 		rr[i] = pulse{
-			src:  c.label,
-			dest: d,
-			kind: k,
+			src:   c.label,
+			dest:  d,
+			kind:  k,
+			count: p.count,
 		}
 	}
 
@@ -107,8 +133,9 @@ func (b *boardcaster) process(p pulse) []pulse {
 
 	for i, d := range b.targets {
 		rr[i] = pulse{
-			src:  b.label,
-			dest: d,
+			src:   b.label,
+			dest:  d,
+			count: p.count,
 		}
 	}
 
@@ -116,7 +143,21 @@ func (b *boardcaster) process(p pulse) []pulse {
 }
 
 type machine struct {
-	items map[string]component
+	items    map[string]part
+	count    int
+	terminal *conjunction
+}
+
+func (m *machine) findIntervals() []int {
+LOOP:
+	v, ok := m.terminal.intervals()
+
+	if !ok {
+		m.button()
+		goto LOOP
+	}
+
+	return v
 }
 
 func (m *machine) run(v []pulse) (int, int) {
@@ -163,12 +204,14 @@ func (m *machine) run(v []pulse) (int, int) {
 }
 
 func (m *machine) button() (int, int) {
+	m.count++
+
 	s, ok := m.items["broadcaster"]
 	if !ok {
 		panic("failed to find broadcaster module")
 	}
 
-	a, b := m.run(s.process(pulse{}))
+	a, b := m.run(s.process(pulse{count: m.count}))
 
 	return a + 1, b
 }
@@ -200,19 +243,27 @@ func stringByIndex(s string, i, j int) string {
 	return b.String()
 }
 
-func parseLabel(l string) (r string, k uint8) {
+type component uint8
+
+const (
+	FLIP_FLOP component = iota
+	CONJUNCTION
+	BOARDCASTER
+)
+
+func parseLabel(l string) (r string, k component) {
 	switch {
 	case strings.IndexRune(l, '%') == 0:
 		r = stringByIndex(l, 1, utf8.RuneCountInString(l))
-		k = 0
+		k = FLIP_FLOP
 	case strings.IndexRune(l, '&') == 0:
 		r = stringByIndex(l, 1, utf8.RuneCountInString(l))
-		k = 1
+		k = CONJUNCTION
 	case l == "broadcaster":
 		r = l
-		k = 2
+		k = BOARDCASTER
 	default:
-		k = 3
+		panic(fmt.Sprintf("failed to parse label %q", l))
 	}
 
 	return
@@ -220,8 +271,11 @@ func parseLabel(l string) (r string, k uint8) {
 
 func parse(p string) *machine {
 	ss := strings.Split(p, "\n")
-	m := &machine{items: make(map[string]component, len(ss))}
+	m := &machine{
+		items: make(map[string]part, len(ss)),
+	}
 	srcs := make(map[string]map[string]polarity, len(ss))
+	cons := make(map[string]*conjunction, len(ss))
 
 	for _, s := range ss {
 		if s == "" {
@@ -232,7 +286,7 @@ func parse(p string) *machine {
 		dd := strings.Split(pp[1], ",")
 
 		targets := make([]string, len(dd))
-		label, k := parseLabel(pp[0])
+		label, kind := parseLabel(pp[0])
 
 		for i, d := range dd {
 			di := strings.TrimSpace(d)
@@ -245,34 +299,59 @@ func parse(p string) *machine {
 			srcs[di][label] = LOW
 		}
 
-		switch k {
-		case 0:
+		switch kind {
+		case FLIP_FLOP:
 			m.items[label] = &flipFlop{
 				label:   label,
 				targets: targets,
 			}
-		case 1:
+		case CONJUNCTION:
 			if _, ok := srcs[label]; !ok {
 				srcs[label] = make(map[string]polarity, 5)
 			}
 
-			m.items[label] = &conjunction{
+			cons[label] = &conjunction{
 				label:   label,
 				sources: srcs[label],
 				targets: targets,
+				cycles:  make(map[string]int, 5),
 			}
-		case 2:
+
+			m.items[label] = cons[label]
+		case BOARDCASTER:
 			m.items[label] = &boardcaster{
 				label:   label,
 				targets: targets,
 			}
-		default:
-			panic(fmt.Sprintf("failed to parse label %q", pp[0]))
 		}
-
 	}
 
+	// df is the module that connect to rx
+	m.terminal = cons["df"]
+
 	return m
+}
+
+// https://siongui.github.io/2017/06/03/go-find-lcm-by-gcd/
+// greatest common divisor (GCD) via Euclidean algorithm
+func GCD(a, b int) int {
+	for b != 0 {
+		t := b
+		b = a % b
+		a = t
+	}
+	return a
+}
+
+// find Least Common Multiple (LCM) via GCD
+func LCM(a, b int, integers ...int) int {
+	result := a * b / GCD(a, b)
+
+	for i := 0; i < len(integers); i++ {
+		result = LCM(result, integers[i])
+	}
+
+	return result
 }
 
 func main() {
@@ -282,7 +361,9 @@ func main() {
 	}
 
 	m := parse(string(bb))
-	a := m.rep(1000)
 
-	fmt.Println("part one value: ", a)
+	fmt.Println("part one value: ", m.rep(1000))
+
+	bi := m.findIntervals()
+	fmt.Println("part two value: ", LCM(bi[0], bi[1], bi[2:]...))
 }
