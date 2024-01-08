@@ -11,21 +11,6 @@ var fn = "./day_10/input.txt"
 
 type dir uint8
 
-func (d dir) String() string {
-	switch d {
-	case LEFT:
-		return "L"
-	case UP:
-		return "U"
-	case RIGHT:
-		return "R"
-	case DOWN:
-		return "D"
-	}
-
-	return "unknown"
-}
-
 const (
 	LEFT dir = iota
 	UP
@@ -108,28 +93,30 @@ type grid struct {
 	pp    []pipe
 }
 
-func (g grid) printPositions(pp []position) string {
-	dd := make(map[int]string, len(pp))
-
+func (g grid) line(i int, pp []position) string {
+	u := g.cols * i
+	cc := make(map[int]struct{}, g.cols)
 	for _, p := range pp {
-		dd[p.i] = p.d.String()
+		if p.i >= u && p.i < u+g.cols {
+			cc[p.i] = struct{}{}
+		}
 	}
 
 	var b strings.Builder
 
 	for i, p := range g.pp {
-		if i > 0 && i%g.cols == 0 {
-			b.WriteRune('\n')
-		}
-
-		if d, ok := dd[i]; ok {
-			b.WriteString(d)
+		if i < u || i >= u+g.cols {
 			continue
 		}
 
-		switch p.char {
-		case 'S':
-			b.WriteRune('S')
+		_, found := cc[i]
+
+		switch {
+		case i == g.start:
+			pi := g.findStartPipe()
+			b.WriteRune(pi.char)
+		case found:
+			b.WriteRune(p.char)
 		default:
 			b.WriteRune('.')
 		}
@@ -172,7 +159,47 @@ func (g grid) next(p position) (position, bool) {
 	return p, false
 }
 
-func (g grid) walk(i int) []position {
+func (g grid) findStartIndexes() ([]int, []dir) {
+	jj := make([]int, 0, 4)
+	dd := make([]dir, 0, 4)
+	for d := range g.pp[g.start].routes {
+		pi := position{g.start, d}
+		if pj, ok := g.next(pi); ok {
+			jj = append(jj, pj.i)
+			dd = append(dd, pj.d)
+		}
+	}
+
+	return jj, dd
+}
+
+func (g grid) findStartPosition() (int, position) {
+	jj, dd := g.findStartIndexes()
+	return jj[0], position{g.start, dd[1]}
+}
+
+func (g grid) findStartPipe() pipe {
+	pp := []pipe{
+		PIPE_HORIZONTAL,
+		PIPE_VERTICAL,
+		PIPE_UP_RIGHT,
+		PIPE_UP_LEFT,
+		PIPE_DOWN_RIGHT,
+		PIPE_DOWN_LEFT,
+	}
+	_, dd := g.findStartIndexes()
+
+	input, want := (dd[0] + 2%4), dd[1]
+	for _, p := range pp {
+		if got, ok := p.routes[input]; ok && got == want {
+			return p
+		}
+	}
+
+	panic("failed to find start")
+}
+
+func (g grid) walk() []position {
 	var loop func(int, []position) []position
 
 	loop = func(end int, walked []position) []position {
@@ -193,24 +220,11 @@ func (g grid) walk(i int) []position {
 		panic("no route to end")
 	}
 
-	jj := make([]int, 0, 4)
-	dd := make([]dir, 0, 4)
-	for d := range g.pp[i].routes {
-		pi := position{i, d}
-		if pj, ok := g.next(pi); ok {
-			jj = append(jj, pj.i)
-			dd = append(dd, pj.d)
-		}
-	}
-
-	if len(jj) != 2 || len(dd) != 2 {
-		panic("must have start and finish")
-	}
-
+	end, first := g.findStartPosition()
 	rr := make([]position, 1, g.cols*g.rows)
-	rr[0] = position{i, dd[1]}
+	rr[0] = first
 
-	return loop(jj[0], rr)
+	return loop(end, rr)
 }
 
 func parse(s string) *grid {
@@ -253,6 +267,42 @@ func parse(s string) *grid {
 	return g
 }
 
+func findEnclosed(s string) []int {
+	rr := []rune(s)
+	ee := make([]int, 0, len(rr))
+
+	var (
+		oi int
+		o  bool
+	)
+
+	for i, r := range rr {
+
+		switch r {
+		case '|':
+			o = !o
+		case 'L':
+			oi = i
+		case 'F':
+			oi = i
+		case 'J':
+			if rr[oi] == 'F' {
+				o = !o
+			}
+		case '7':
+			if rr[oi] == 'L' {
+				o = !o
+			}
+		}
+
+		if o && r == '.' {
+			ee = append(ee, i)
+		}
+	}
+
+	return ee
+}
+
 func main() {
 	bb, err := os.ReadFile(fn)
 	if err != nil {
@@ -260,7 +310,19 @@ func main() {
 	}
 
 	g := parse(string(bb))
-	w := g.walk(g.start)
-	// fmt.Println(g.printPositions(w))
-	fmt.Println("part one value: ", len(w)/2)
+	pp := g.walk()
+
+	var b int
+	for i := 0; i < g.rows; i++ {
+		l := g.line(i, pp)
+		li := []rune(l)
+		for _, j := range findEnclosed(l) {
+			li[j] = '*'
+			b++
+		}
+		fmt.Println(string(li))
+	}
+
+	fmt.Println("part one value: ", len(pp)/2)
+	fmt.Println("part two value: ", b)
 }
